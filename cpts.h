@@ -52,6 +52,8 @@ extern void * map_get     (Map * , int         );
 
 #endif 
 
+typedef enum { false, true } two;
+
 typedef enum { Star , Box } Set;
 
 typedef struct { void * s ; } Sort; // TODO : DANGER
@@ -60,10 +62,10 @@ typedef struct { Set s
                ; Set * (* lift) (const Set)
                ; Set * (* rule) (const Set , const Set) ; } PTS;
 
-enum TermKind { Var, App, Lam, Pi, Sg, SO };
+enum TKind { Var, App, Lam, Pi, Sg, SO };
 
 typedef struct Term 
-{ enum TermKind Kind;
+{ enum TKind Kind
 ; union { struct Var { const char        * v                                                 ; } Var
         ; struct App { const struct Term * h ; const struct Term * b                         ; } App
         ; struct Lam { const char        * n ; const struct Term * h ; const struct Term * t ; } Lam
@@ -71,13 +73,21 @@ typedef struct Term
         ; struct  Sg { const char        * n ; const struct Term * l ; const struct Term * r ; }  Sg
         ; struct  SO { PTS                 s                                                 ; }  SO ; }; } Term;
 
-extern Term * var  (const char *                              );
-extern Term * app  (const Term * , const Term *               );
-extern Term * lam  (const char * , const Term * , const Term *);
-extern Term * pi   (const char * , const Term * , const Term *);
-extern Term * arr  (const Term * , const Term *               );
-extern Term * sg   (const char * , const Term * , const Term *);
+extern Term *  var (const char *                              );
+extern Term *  app (const Term * , const Term *               );
+extern Term *  lam (const char * , const Term * , const Term *);
+extern Term *   pi (const char * , const Term * , const Term *);
+extern Term *  arr (const Term * , const Term *               );
+extern Term *   sg (const char * , const Term * , const Term *);
 extern Term * sort (const Set                                 );
+
+extern Term * subst (const Term *, const char * from, const Term *);
+
+extern two alpha_eq (const Term *, const Term *);
+extern two  beta_eq (const Term *, const Term *);
+
+extern Term * whnf (Term *);
+extern Term *   nf (Term *);
 
 extern void fatal (const char * fn, int l, const char * f, char * e);
 

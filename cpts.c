@@ -22,7 +22,7 @@
 int
 hash (int n) 
 {
-    n *= 0x85ebca6b;
+    n *= 0xdeadbeef;
     n ^= n >> 16;
     return n;
 }
@@ -242,18 +242,135 @@ LAMBDA_CUBE(STLC);
 #if defined(CPTS_TYPECHECK) || defined(CPTS_ALL)
 
 Term *
-type_check (Term * r, Map * con)
+type_check (Term * t, Map * con)
 {
-    switch (r->Kind) 
+    switch (t->Kind) 
     {
-        case Var : {
-            break;
+        case Var : return map_get(con, &t->Var.v);
+
+        case App : {
+            Term * l = type_check(t->App.h, con); if ( whnf(l)->Kind != Pi                         ) return NULL;
+            Term * r = type_check(t->App.b, con); if ( whnf(r)->Kind != Pi || !beta_eq(r, l->Pi.e) ) return NULL;
+            return subst(l->Pi.b, l->Pi.n, r);
         }
-        default : printf("Default case");
+
+        case Lam : {
+            if (type_check(t->Lam.h, con) == NULL) return NULL;
+            Map * nc = con;
+            // new_context.insert(bound.clone(), *ty.clone());
+            Term * i = type_check(t->Lam.t, nc);
+            return pi(t->Lam.n, t->Lam.h, i);
+        }
+
+        case Pi : {
+            return NULL;
+        }
+
+        case Sg : {
+            return NULL;
+        }
+
+        case SO : {
+            return NULL;
+        }
     }
 }
 
+Term * 
+subst (const Term * t, const char * from, const Term * to)
+{
+    switch (t->Kind) 
+    {
+        case Var : return NULL;
+        case App : return NULL;
+        case Lam : return NULL;
+        case  Pi : return NULL;
+        case  Sg : return NULL;
+        case  SO : return NULL;
+    }
+
+}
+
+Map * 
+free_vars (const Term * t)
+{
+    return NULL;
+}
+
 #endif // CPTS_TYPECHECK || CPTS_ALL
+
+
+
+/* ------------------------------------------------------------- */
+
+/*
+ * Equality
+ */
+
+#if defined(CPTS_EQUALITY) || defined(CPTS_ALL)
+
+two 
+alpha_eq (const Term * a, const Term * b) 
+{
+    // switch ((a->Kind, b->Kind)) 
+    // {
+    //     (Pi,Lam) : return false;
+    //     default : return false;
+    // }
+    switch (a->Kind) 
+    {
+        case Var : switch (b->Kind) { case Var : return a->Var.v == b->Var.v 
+                                    ;  default : return false; }
+        case App : switch (b->Kind) { case App : return alpha_eq(a->App.h, b->App.h) && alpha_eq(a->App.b, b->App.b)
+                                    ;  default : return false; }
+        case Lam : switch (b->Kind) { case Lam : return true // TODO 
+                                    ;  default : return false; }
+        case  Pi : switch (b->Kind) { case  Pi : return true // TODO 
+                                    ;  default : return false; }
+        case  SO : switch (b->Kind) { case  SO : return a->SO.s.s == b->SO.s.s 
+                                    ;  default : return false; }
+         default : return false;
+    }
+}
+
+two 
+beta_eq (const Term * a, const Term * b) 
+{
+    return alpha_eq(nf(a), nf(b));
+}
+
+
+#endif // CPTS_EQUALITY || CPTS_ALL
+
+
+
+/* ------------------------------------------------------------- */
+
+/*
+ * Normalisation
+ */
+
+#if defined(CPTS_NORMALISATION) || defined(CPTS_ALL)
+
+Term * 
+whnf (Term * t)
+{
+    return NULL;
+}
+
+Term * 
+spine (Term * t, Term ** s) 
+{
+    return NULL;
+}
+
+Term * 
+nf (Term * t)
+{
+    return NULL;
+}
+
+#endif // CPTS_NORMALISATION || CPTS_ALL
 
 
 
@@ -352,8 +469,8 @@ main (void)
 void 
 test_lam_intro () 
 {
-    Term * l = var("l");
-    Term * r = var("r");
+    Term *  l = var("l");
+    Term *  r = var("r");
     Term * la = lam ("x", l , NULL);
     // ASSERT(strcmp(la->Lam.h->Var.v, 'l'));
     printf("%s\n", la->Lam.h->Var.v);
