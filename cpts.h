@@ -43,7 +43,9 @@ typedef struct { int   * k
                ; void ** v
                ; int     c 
                ; int     l
-               ; } Map;
+               ; } Map   ;
+
+// TODO : Map create and destroy as hashet
 
 extern void   map_free    (Map *               );
 extern int    map_reserve (Map * , int         );
@@ -52,9 +54,28 @@ extern void * map_get     (Map * , int         );
 
 #endif 
 
-typedef enum { false, true } two;
+#if defined(CPTS_MAP) || defined(CPTS_ALL)
 
-typedef enum { Star , Box } Set;
+typedef struct { size_t    b 
+               ; size_t    m 
+               ; size_t    c 
+               ;   void ** i // TODO : size_t
+               ; size_t    l 
+               ; size_t    d 
+               ; } Hashset ;
+
+extern Hashset * hashet_create (void);
+extern void hashet_destroy (Hashset *);
+extern int hashset_reserve (Hashset *);
+extern void * hashset_get (Hashset *);
+extern int hashset_insert (Hashset * , void *);
+extern int hashset_remove (Hashset * , void *);
+extern int hashset_is_contained (Hashset * , void *);
+
+#endif 
+
+typedef enum { false , true } two;
+typedef enum { Star  ,  Box } Set;
 
 typedef struct { void * s ; } Sort; // TODO : DANGER
 
@@ -88,6 +109,9 @@ extern two  beta_eq (const Term *, const Term *);
 
 extern Term * whnf (Term *);
 extern Term *   nf (Term *);
+
+extern const char *    format (const char *, ...);
+extern const char * show_term (Term *           );
 
 extern void fatal (const char * fn, int l, const char * f, char * e);
 

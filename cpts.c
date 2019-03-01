@@ -119,6 +119,20 @@ map_get (Map * m, int k)
 /* ------------------------------------------------------------- */
 
 /*
+ * Set implementation
+ */
+
+#if defined(CPTS_SET) || defined(CPTS_ALL)
+
+
+
+#endif // CPTS_SET || CPTS_ALL
+
+
+
+/* ------------------------------------------------------------- */
+
+/*
  * Term introduction rules 
  */
 
@@ -242,36 +256,76 @@ LAMBDA_CUBE(STLC);
 #if defined(CPTS_TYPECHECK) || defined(CPTS_ALL)
 
 Term *
-type_check (Term * t, Map * con)
+type_check (Term * t, Map * con, PTS * ts)
 {
     switch (t->Kind) 
     {
-        case Var : return map_get(con, &t->Var.v);
+        case Var : { 
+            Term * v = map_get(con, &t->Var.v);
+            
+            if (v != NULL) DIE(format("Unbound variable %s", t->Var.v));
+
+            return v;
+        }
 
         case App : {
-            Term * l = type_check(t->App.h, con); if ( whnf(l)->Kind != Pi                         ) return NULL;
-            Term * r = type_check(t->App.b, con); if ( whnf(r)->Kind != Pi || !beta_eq(r, l->Pi.e) ) return NULL;
+            Term * l = whnf(type_check(t->App.h, con, ts));
+
+            if (l->Kind != Pi) DIE(format("Expression of type %s cannot be applied", l)); // TODO : print bug 
+
+            Term * r = type_check(t->App.b, con, ts);
+
+            if (!beta_eq(r, l->Pi.e)) DIE(format("%s cannot be substituted with %s", l->Pi.e, r)); // TODO : print bug 
+
             return subst(l->Pi.b, l->Pi.n, r);
         }
 
         case Lam : {
-            if (type_check(t->Lam.h, con) == NULL) return NULL;
+            type_check(t->Lam.h, con, ts);
+
             Map * nc = con;
-            // new_context.insert(bound.clone(), *ty.clone());
-            Term * i = type_check(t->Lam.t, nc);
+            map_set(nc, hash(t->Lam.n), t->Lam.h);
+
+            Term * i = type_check(t->Lam.t, nc, ts);
+
             return pi(t->Lam.n, t->Lam.h, i);
         }
 
         case Pi : {
-            return NULL;
+            Term * dom = whnf(type_check(t->Pi.e, con, ts));
+            if (dom->Kind != SO) DIE(format("Uninhabited domain of pi type provided: %s", dom)); // TODO : print
+
+            Map * nc = con;
+            map_set(con, hash(t->Pi.n), dom); 
+
+            Term * codom = whnf(type_check(t->Pi.b, con, ts));
+            if (codom->Kind != SO) DIE(format("Uninhabited codomain of pi type provided: %s", codom)); // TODO : coprint
+
+            Set * ns = ts->rule(dom->SO.s.s, codom->SO.s.s);
+            if (ns == NULL) DIE(format("Reached omega at %s", t->SO.s.s));
+
+            return ns;
         }
 
         case Sg : {
-            return NULL;
+            Term * dom = whnf(type_check(t->Sg.l, con, ts));
+            if (dom->Kind != SO) DIE(format("Uninhabited domain of pi type provided: %s", dom)); // TODO : print
+
+            Map * nc = con;
+            map_set(con, hash(t->Sg.n), dom); 
+
+            Term * codom = whnf(type_check(t->Sg.r, con, ts));
+            if (codom->Kind != SO) DIE(format("Uninhabited codomain of pi type provided: %s", codom)); // TODO : coprint
+
+            Set * ns = ts->rule(dom->SO.s.s, codom->SO.s.s);
+            if (ns == NULL) DIE(format("Reached omega at %s", t->SO.s.s));
+
+            return ns;
         }
 
         case SO : {
-            return NULL;
+            Set * ns = ts->lift(t->SO.s.s);
+            if (ns == NULL) DIE(format("Reached omega at %s", t->SO.s.s)); else return ns;
         }
     }
 }
@@ -281,9 +335,24 @@ subst (const Term * t, const char * from, const Term * to)
 {
     switch (t->Kind) 
     {
-        case Var : return NULL;
-        case App : return NULL;
-        case Lam : return NULL;
+        case Var : return (t->Var.v == from) ? to : t; // TODO : string equality here 
+        
+        case App : return app(t->App.h, subst(t->App.b, from, to));
+        
+        case Lam : {
+            if (strcmp(t->Lam.n, from)) 
+                return lam(t->Lam.n, subst(t->Lam.h, from, to), t->Lam.t);
+            
+            if (map_get(free_vars(to), t->Lam.n) == NULL) 
+                return lam(t->Lam.n, subst(t->Lam.h, from, to), subst(t->Lam.t, from, to));
+
+            const char * unused = t->Lam.n;
+
+            // for (;;) { // TODO 
+            // }
+
+        }
+
         case  Pi : return NULL;
         case  Sg : return NULL;
         case  SO : return NULL;
@@ -403,11 +472,11 @@ show_term (Term * t)
 {
     switch (t->Kind)
     {
-        case Var : return format("var %s"         ,            t->Var.v                                                   ) ; break;
-        case App : return format("%s $ %s"        , show_term( t->App.h  ) , show_term( t->App.b )                        ) ; break;
-        case Lam : return format("\\{%s} %s. %s"  ,            t->Lam.n    , show_term( t->Lam.h ) , show_term( t->Lam.t )) ; break;
-        case  Pi : return format("%s ->{%s} %s"   , show_term( t->Pi.e   ) ,            t->Pi.n    , show_term( t->Pi.b  )) ; break;
-        case  Sg : return format("Sg{%s} [%s] %s" ,            t->Sg.n     , show_term( t->Sg.l  ) , show_term( t->Sg.r  )) ; break;
+        case Var : return format("var %s"         ,            t->Var.v                                                   ) ; break ;
+        case App : return format("%s $ %s"        , show_term( t->App.h  ) , show_term( t->App.b )                        ) ; break ;
+        case Lam : return format("\\{%s} %s. %s"  ,            t->Lam.n    , show_term( t->Lam.h ) , show_term( t->Lam.t )) ; break ;
+        case  Pi : return format("%s ->{%s} %s"   , show_term( t->Pi.e   ) ,            t->Pi.n    , show_term( t->Pi.b  )) ; break ;
+        case  Sg : return format("Sg{%s} [%s] %s" ,            t->Sg.n     , show_term( t->Sg.l  ) , show_term( t->Sg.r  )) ; break ;
         // case  SO : return format("SO[%s]"         , show_set(  t->SO.s.s )                                                ) ; break;
         default  : return "[None]";
     }
@@ -448,8 +517,8 @@ main (void)
     printf("STLC_rules: %s\n", s ? s : "NULL");
 
     Term * t = var("b");
-    Map * c =  (Map*)calloc(1, sizeof(Map));
-    type_check(t, c);
+    Map  * c = (Map*)calloc(1, sizeof(Map));
+    type_check(t, c, NULL); // TODO : BUG HERE 
 
     test_lam_intro();
 
