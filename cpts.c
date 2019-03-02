@@ -6,10 +6,7 @@
 
 // #include "std.c"
 #include "cpts.h"
-
-#define sym char * 
-
-
+#include "test.c"
 
 /* ------------------------------------------------------------- */
 
@@ -19,12 +16,12 @@
 
 #if defined(CPTS_MAP) || defined(CPTS_ALL)
 
-int
-hash (int n) 
+size_t
+hash (size_t n) 
 {
-    n *= 0xdeadbeef;
-    n ^= n >> 16;
-    return n;
+    // n *= 0xdeadbeef;
+    // n ^= n >> 16;
+    return (n * p1) >> 16;
 }
 
 #endif // CPTS_HASH || CPTS_ALL
@@ -42,8 +39,9 @@ hash (int n)
 void 
 map_free (Map * m)
 {
-    free(m->k); free(m->v);
-    m->k = 0; m->v = 0; m->c = 0; m->l = 0;
+    free(m->k); 
+    free(m->v);
+    free(m);
 }
 
 int 
@@ -51,16 +49,11 @@ map_reserve (Map * m, int c)
 {
   c = MAX(16, c);
   Map n = { .l = 0 
-            , .c = c 
-            , .k = calloc(c, sizeof(int))
-            , .v = malloc(c * sizeof(void*)) };
+          , .c = c 
+          , .k = calloc(c, sizeof(int))
+          , .v = malloc(c * sizeof(void*)) };
   
-//   n.l = 0;
-//   n.c = c;
-//   n.k = calloc(c, sizeof(int));
-//   n.v = malloc(c * sizeof(void*));
-  
-  if (!n.k || !n.v) { free(n.k); free(n.v); return 0; }
+  if (n.k == NULL || n.v == NULL) { free(n.k); free(n.v); return 0; }
 
   for (int i = 0 ; i < m->c ; ++i)
       if (m->k[i]) map_set(&n, m->k[i], m->v[i]);
@@ -124,7 +117,112 @@ map_get (Map * m, int k)
 
 #if defined(CPTS_SET) || defined(CPTS_ALL)
 
+Hashset * 
+hashset_new (void)
+{
+    Hashset * s = calloc(1, sizeof(Hashset));
+    if (s == NULL) return NULL;
 
+    s->b = 3;
+    s->c = (size_t)(1 << s->b);
+    s->m = s->c - 1;
+    s->i = calloc(s->c, sizeof(size_t));
+    s->l = 0;
+    s->d = 0;
+
+    // Hashset s = { .b = 3
+    //             , .c = (size_t)(1<<s.b) 
+    //             , .m = s.c - 1 
+    //             , .i = calloc(s.c, sizeof(size_t)) 
+    //             , .l = 0
+    //             , .d = 0 };
+
+    // if (s.i == NULL) { hashset_free(&s); return NULL; }
+
+    // return &s;
+    return s;
+}
+
+void 
+hashset_free (Hashset * s)
+{
+    if (s) free(s->i);
+    free(s);
+}
+
+int 
+hashset_append (Hashset * s, void * i) 
+{
+    size_t v = (size_t)i;
+    if (v == 0 || v == 1) return -1;
+
+    size_t idx = s->m & hash(v); // (p1 * v);
+
+    while (s->i[idx] != 0 && s->i[idx] != 1) 
+        if (s->i[idx] == v) return 0;
+        else idx = s->m & (idx + p2);
+
+    s->l++;
+    if (s->i[idx] == 1) s->d--;
+    s->i[idx] = v;
+
+    return 1;
+}
+
+static void 
+reharsh (Hashset * s) 
+{
+    if (s->l + s->d >= (double)s->c * 0.85) {
+        size_t * bi = s->i;
+        size_t   bc = s->c; 
+        s->b++;
+        s->c = (size_t)(1 << s->b);
+        s->m = s->c - 1;
+        s->i = calloc(s->c, sizeof(size_t));
+        s->l = 0;
+        s->d = 0;
+        for (size_t idx = 0; idx < bc; ++idx) hashset_append(s, (void *)bi[idx]);
+        free(bi);
+    }
+}
+
+int 
+hashset_insert (Hashset * s, void * i)
+{
+    int r = hashset_append(s, i);
+    reharsh(s);
+    return r;
+}
+
+int 
+hashset_remove (Hashset * s, void * i)
+{
+    size_t v = (size_t)i;
+    size_t idx = s->m & hash(v);
+
+    while (s->i[idx] != 0) 
+        if (s->i[idx] != 0) {
+            s->i[idx] = 1;
+            s->l--;
+            s->d++;
+            return 1;
+        } else idx = s->m & (idx + p2);
+
+    return 0;
+}
+
+int 
+hashset_is_contained (Hashset * s, void * i) 
+{
+    size_t v = (size_t)i;
+    size_t idx = s->m & hash(v);
+
+    while (s->i[idx] != 0) 
+        if (s->i[idx] == v) return 1;
+        else idx = s->m & (idx + p2);
+
+    return 0;
+}
 
 #endif // CPTS_SET || CPTS_ALL
 
@@ -521,28 +619,7 @@ main (void)
     type_check(t, c, NULL); // TODO : BUG HERE 
 
     test_lam_intro();
+    stage_1();
 
     return 0;
 }
-
-
-
-/* ------------------------------------------------------------- */
-
-/*
- * Tests
- */
-
-#if defined(CPTS_TEST) || defined(CPTS_ALL)
-
-void 
-test_lam_intro () 
-{
-    Term *  l = var("l");
-    Term *  r = var("r");
-    Term * la = lam ("x", l , NULL);
-    // ASSERT(strcmp(la->Lam.h->Var.v, 'l'));
-    printf("%s\n", la->Lam.h->Var.v);
-}
-
-#endif // CPTS_TEST || CPTS_ALL

@@ -10,7 +10,6 @@ __BEGIN_DECLS
 #define CPTS_HASH
 #endif 
 
-#if defined(CPTS_HASH) || defined(CPTS_ALL)
 
 #define BUILD_BUG_ON_ZERO(e) (sizeof(struct { int:-!!(e); }))
 #define BUILD_BUG_ON_NULL(e) ((void *)sizeof(struct { int:-!!(e); }))
@@ -29,6 +28,14 @@ __BEGIN_DECLS
 #define ASSERT(e) __ASSERT(e,__LINE__) 
 #define __ASSERT(e, line) typedef char __GLUE(assertion_failed_, line) [2*!!(e)-1];
 
+#if defined(CPTS_HASH) || defined(CPTS_ALL)
+
+static const unsigned int p1 = 89;
+static const unsigned int p2 = 3301;
+static const unsigned int p3 = 7621;
+
+extern size_t hash (size_t);
+
 #endif // CPTS_HASH 
 
 // pub trait PureTypeSystem: Clone + Debug {
@@ -39,38 +46,40 @@ __BEGIN_DECLS
 
 #if defined(CPTS_MAP) || defined(CPTS_ALL)
 
+// TODO : add mask and coerce void to size_t and also merge this with Hashset
 typedef struct { int   * k
                ; void ** v
                ; int     c 
                ; int     l
                ; } Map   ;
 
-// TODO : Map create and destroy as hashet
-
+extern  Map * map_new     (void                ); // TODO : implement
 extern void   map_free    (Map *               );
-extern int    map_reserve (Map * , int         );
-extern int    map_set     (Map * , int , void *);
+extern  int   map_reserve (Map * , int         );
+extern  int   map_set     (Map * , int , void *);
 extern void * map_get     (Map * , int         );
 
 #endif 
 
 #if defined(CPTS_MAP) || defined(CPTS_ALL)
 
-typedef struct { size_t    b 
-               ; size_t    m 
-               ; size_t    c 
-               ;   void ** i // TODO : size_t
-               ; size_t    l 
-               ; size_t    d 
-               ; } Hashset ;
+typedef struct { size_t   b 
+               ; size_t   m 
+               ; size_t   c 
+            //    ;   void ** i 
+               ; size_t * i
+               ; size_t   l 
+               ; size_t   d 
+               ; } Hashset;
 
-extern Hashset * hashet_create (void);
-extern void hashet_destroy (Hashset *);
-extern int hashset_reserve (Hashset *);
-extern void * hashset_get (Hashset *);
-extern int hashset_insert (Hashset * , void *);
-extern int hashset_remove (Hashset * , void *);
-extern int hashset_is_contained (Hashset * , void *);
+extern Hashset * hashset_new          (void             );
+extern    void   hashset_free         (Hashset *        );
+extern     int   hashset_reserve      (Hashset *        ); // TODO : implement 
+extern    void * hashset_get          (Hashset *        ); // TODO : implement
+extern int   hashset_append       (Hashset *, void *);
+extern        int   hashset_insert       (Hashset *, void *);
+extern     int   hashset_remove       (Hashset *, void *);
+extern     int   hashset_is_contained (Hashset *, void *);
 
 #endif 
 
@@ -102,7 +111,8 @@ extern Term *  arr (const Term * , const Term *               );
 extern Term *   sg (const char * , const Term * , const Term *);
 extern Term * sort (const Set                                 );
 
-extern Term * subst (const Term *, const char * from, const Term *);
+extern Term *     subst (const Term *, const char * from, const Term *);
+extern  Map * free_vars (const Term *                                 );
 
 extern two alpha_eq (const Term *, const Term *);
 extern two  beta_eq (const Term *, const Term *);
@@ -117,7 +127,9 @@ extern void fatal (const char * fn, int l, const char * f, char * e);
 
 #if defined(CPTS_TEST) || defined(CPTS_ALL)
 
-extern void test_lam_intro ();
+extern void test_stage_1         (void);
+extern void test_lam_intro       (void);
+extern void test_hashset_stage_1 (void);
 
 #endif // CPTS_TEST || CPTS_ALL
 
