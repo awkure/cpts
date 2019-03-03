@@ -28,15 +28,21 @@ __BEGIN_DECLS
 #define ASSERT(e) __ASSERT(e,__LINE__) 
 #define __ASSERT(e, line) typedef char __GLUE(assertion_failed_, line) [2*!!(e)-1];
 
+#if defined(CPTS_UTILS) || defined(CPTS_ALL)
+
+extern int string_append(char **, const char *, ...);
+
+#endif // CPTS_UTILS || CPTS_ALL
+
 #if defined(CPTS_HASH) || defined(CPTS_ALL)
 
-static const unsigned int p1 = 89;
-static const unsigned int p2 = 3301;
-static const unsigned int p3 = 7621;
+static const unsigned int p1 = 0x0059;
+static const unsigned int p2 = 0x0CE5;
+static const unsigned int p3 = 0x1DC5;
 
 extern size_t hash (size_t);
 
-#endif // CPTS_HASH 
+#endif // CPTS_HASH || CPTS_ALL
 
 // pub trait PureTypeSystem: Clone + Debug {
 //     type Sort: Copy + Clone + Debug + Display + Eq + Hash;
@@ -47,11 +53,12 @@ extern size_t hash (size_t);
 #if defined(CPTS_MAP) || defined(CPTS_ALL)
 
 // TODO : add mask and coerce void to size_t and also merge this with Hashset
-typedef struct { int   * k
-               ; void ** v
-               ; int     c 
-               ; int     l
-               ; } Map   ;
+typedef struct { size_t * k
+            //    ; void ** v
+               ; size_t * v
+               ; size_t   c 
+               ; size_t   l
+               ; } Map    ;
 
 extern  Map * map_new     (void                ); // TODO : implement
 extern void   map_free    (Map *               );
@@ -76,8 +83,8 @@ extern Hashset * hashset_new          (void             );
 extern    void   hashset_free         (Hashset *        );
 extern     int   hashset_reserve      (Hashset *        ); // TODO : implement 
 extern    void * hashset_get          (Hashset *        ); // TODO : implement
-extern int   hashset_append       (Hashset *, void *);
-extern        int   hashset_insert       (Hashset *, void *);
+extern     int   hashset_append       (Hashset *, void *);
+extern     int   hashset_insert       (Hashset *, void *);
 extern     int   hashset_remove       (Hashset *, void *);
 extern     int   hashset_is_contained (Hashset *, void *);
 
@@ -103,22 +110,25 @@ typedef struct Term
         ; struct  Sg { const char        * n ; const struct Term * l ; const struct Term * r ; }  Sg
         ; struct  SO { PTS                 s                                                 ; }  SO ; }; } Term;
 
-extern Term *  var (const char *                              );
-extern Term *  app (const Term * , const Term *               );
-extern Term *  lam (const char * , const Term * , const Term *);
-extern Term *   pi (const char * , const Term * , const Term *);
-extern Term *  arr (const Term * , const Term *               );
-extern Term *   sg (const char * , const Term * , const Term *);
-extern Term * sort (const Set                                 );
+extern Term *  var (const char *                            );
+extern Term *  app (const Term *, const Term *              );
+extern Term *  lam (const char *, const Term *, const Term *);
+extern Term *   pi (const char *, const Term *, const Term *);
+extern Term *  arr (const Term *, const Term *              );
+extern Term *   sg (const char *, const Term *, const Term *);
+extern Term * sort (const Set                               );
 
-extern Term *     subst (const Term *, const char * from, const Term *);
-extern  Map * free_vars (const Term *                                 );
+extern    Term *     subst (const Term *, const char * from, const Term *);
+extern Hashset * free_vars (const Term *                                 );
 
 extern two alpha_eq (const Term *, const Term *);
 extern two  beta_eq (const Term *, const Term *);
 
-extern Term * whnf (Term *);
-extern Term *   nf (Term *);
+extern Term *       fold (Term * s[], Term *, Term * (*f)(const Term *, const Term *));
+extern Term *       whnf (Term *                                                     );
+extern Term * spine_whnf (Term *, Term * s[]                                         );
+extern Term *         nf (Term *                                                     );
+extern Term *   spine_nf (Term *, Term * s[]                                         ); 
 
 extern const char *    format (const char *, ...);
 extern const char * show_term (Term *           );

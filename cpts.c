@@ -2,11 +2,48 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <unistd.h>
-// #include <string.h>
 
 // #include "std.c"
 #include "cpts.h"
 #include "test.c"
+
+/* ------------------------------------------------------------- */
+
+/*
+ * Meta utils
+ */
+
+#if defined(CPTS_UTILS) || defined(CPTS_ALL)
+
+
+int string_append(char ** from, const char * fmt, ...)
+{
+    char * r = NULL;
+    char * b = NULL;
+
+    va_list arg_ptr;
+    va_start(arg_ptr, fmt);
+    vasprintf(&r, fmt, arg_ptr);
+
+    asprintf(&b, "%s", (*from == NULL ? "\0" : *from));
+
+    char * n = (char *)calloc(strlen(b) + strlen(r) + 1, sizeof(char));
+
+    strcat(n, b);
+    strcat(n, r);
+
+    if (*from) free(*from);
+    *from = n;
+
+    free(b);
+    free(r);
+
+    return 0;
+}
+
+#endif // CPTS_UTILS || CPTS_ALL
+
+
 
 /* ------------------------------------------------------------- */
 
@@ -19,9 +56,7 @@
 size_t
 hash (size_t n) 
 {
-    // n *= 0xdeadbeef;
-    // n ^= n >> 16;
-    return (n * p1) >> 16;
+    return (n * p1) ^ ((n * p2) >> 16);
 }
 
 #endif // CPTS_HASH || CPTS_ALL
@@ -47,22 +82,29 @@ map_free (Map * m)
 int 
 map_reserve (Map * m, int c) 
 {
-  c = MAX(16, c);
-  Map n = { .l = 0 
-          , .c = c 
-          , .k = calloc(c, sizeof(int))
-          , .v = malloc(c * sizeof(void*)) };
+    c = MAX(16, c);
+    Map * n = calloc(c, sizeof(Map)); 
+    n->k = calloc(c, sizeof(size_t));
+    n->v = malloc(c * sizeof(size_t));
+    n->c = c;
+    n->l = 0;
+    // { .l = 0 
+    //       , .c = c 
+    //       , .k = calloc(c, sizeof(int))
+    //       , .v = malloc(c * sizeof(void*)) };
+
+
   
-  if (n.k == NULL || n.v == NULL) { free(n.k); free(n.v); return 0; }
+    if (n->k == NULL || n->v == NULL) { free(n->k); free(n->v); return 0; }
 
-  for (int i = 0 ; i < m->c ; ++i)
-      if (m->k[i]) map_set(&n, m->k[i], m->v[i]);
+    for (int i = 0 ; i < m->c ; ++i)
+        if (m->k[i]) map_set(&n, m->k[i], m->v[i]);
 
-  free(m->k); 
-  free(m->v);
-  *m = n;
+    free(m->k); 
+    free(m->v);
+    m = n;
 
-  return 1;
+    return 1;
 }
 
 int 
@@ -130,16 +172,6 @@ hashset_new (void)
     s->l = 0;
     s->d = 0;
 
-    // Hashset s = { .b = 3
-    //             , .c = (size_t)(1<<s.b) 
-    //             , .m = s.c - 1 
-    //             , .i = calloc(s.c, sizeof(size_t)) 
-    //             , .l = 0
-    //             , .d = 0 };
-
-    // if (s.i == NULL) { hashset_free(&s); return NULL; }
-
-    // return &s;
     return s;
 }
 
@@ -151,9 +183,8 @@ hashset_free (Hashset * s)
 }
 
 int 
-hashset_append (Hashset * s, void * i) 
+hashset_append (Hashset * s, void * v) 
 {
-    size_t v = (size_t)i;
     if (v == 0 || v == 1) return -1;
 
     size_t idx = s->m & hash(v); // (p1 * v);
@@ -194,10 +225,34 @@ hashset_insert (Hashset * s, void * i)
     return r;
 }
 
-int 
-hashset_remove (Hashset * s, void * i)
+int
+hashset_union (Hashset * t, Hashset * s)
 {
-    size_t v = (size_t)i;
+    
+    if (t == NULL || t->i == NULL
+    ||  s == NULL || s->i == NULL ) return -1;
+
+    // size_t idx = s->m & hash(v); // (p1 * v);
+
+    // while (s->i[idx] != 0 && s->i[idx] != 1) 
+    //     if (s->i[idx] == v) return 0;
+    //     else idx = s->m & (idx + p2);
+
+    // s->l++;
+    // if (s->i[idx] == 1) s->d--;
+    // s->i[idx] = v;
+
+    // return 1;
+    int r;
+
+    reharsh(t);
+
+    return r;
+}
+
+int 
+hashset_remove (Hashset * s, void * v)
+{
     size_t idx = s->m & hash(v);
 
     while (s->i[idx] != 0) 
@@ -212,9 +267,8 @@ hashset_remove (Hashset * s, void * i)
 }
 
 int 
-hashset_is_contained (Hashset * s, void * i) 
+hashset_is_contained (Hashset * s, void * v) 
 {
-    size_t v = (size_t)i;
     size_t idx = s->m & hash(v);
 
     while (s->i[idx] != 0) 
@@ -433,7 +487,7 @@ subst (const Term * t, const char * from, const Term * to)
 {
     switch (t->Kind) 
     {
-        case Var : return (t->Var.v == from) ? to : t; // TODO : string equality here 
+        case Var : return strcmp(t->Var.v, from) ? t : to; // TODO : possible bug
         
         case App : return app(t->App.h, subst(t->App.b, from, to));
         
@@ -444,24 +498,113 @@ subst (const Term * t, const char * from, const Term * to)
             if (map_get(free_vars(to), t->Lam.n) == NULL) 
                 return lam(t->Lam.n, subst(t->Lam.h, from, to), subst(t->Lam.t, from, to));
 
-            const char * unused = t->Lam.n;
+            char * unused = t->Lam.n;
+            string_append(&unused, "'");
 
-            // for (;;) { // TODO 
-            // }
-
+            for (;;) { 
+                Hashset * used = free_vars(t->Lam.t); // TODO : pointer mistype
+                hashset_union(used, free_vars(to));
+                
+                if (hashset_is_contained(used, unused)) string_append(unused, "'");
+                else {
+                    Term * r = lam(unused, subst(t, t->Lam.n, var(unused)), subst(t->Lam.h, t->Lam.n, var(unused)));
+                    return subst(r, from, to);
+                }
+            }
         }
 
-        case  Pi : return NULL;
-        case  Sg : return NULL;
-        case  SO : return NULL;
+        case  Pi : {
+            if (strcmp(t->Pi.n, from) != 0) 
+                return pi(t->Pi.n, subst(t->Pi.e, from, to), t->Pi.b);
+
+            if (!hashset_is_contained(free_vars(to), t->Pi.n))
+                return pi(t->Pi.n, subst(t->Pi.e, from, to), subst(t->Pi.b, from, to));
+
+            char * unused = t->Pi.n;
+            string_append(&unused, "'");
+
+            for (;;) {
+                Hashset * used = free_vars(t->Pi.b);
+                hashset_union(used, free_vars(to));
+
+                if (hashset_is_contained(used, unused)) string_append(unused, "'");
+                else {
+                    Term * r = pi(unused, subst(t, t->Pi.n, var(unused)), subst(t->Pi.e, t->Pi.b, var(unused)));
+                    return subst(r, from, to);
+                }
+            }
+        }
+        
+        case  Sg : {
+            if (strcmp(t->Pi.n, from) != 0) 
+                return pi(t->Pi.n, subst(t->Pi.e, from, to), t->Pi.b);
+
+            if (!hashset_is_contained(free_vars(to), t->Pi.n))
+                return pi(t->Pi.n, subst(t->Pi.e, from, to), subst(t->Pi.b, from, to));
+
+            char * unused = t->Pi.n;
+            string_append(&unused, "'");
+
+            for (;;) {
+                Hashset * used = free_vars(t->Pi.b);
+                hashset_union(used, free_vars(to));
+
+                if (hashset_is_contained(used, unused)) string_append(unused, "'");
+                else {
+                    Term * r = pi(unused, subst(t, t->Pi.n, var(unused)), subst(t->Pi.e, t->Pi.b, var(unused)));
+                    return subst(r, from, to);
+                }
+            }
+        }
+
+        case  SO : return t;
     }
 
 }
 
-Map * 
+Hashset * 
 free_vars (const Term * t)
 {
-    return NULL;
+    Hashset * s = NULL;
+
+    switch (t->Kind) {
+
+        case Var : hashset_insert(s, t->Var.v);
+
+        case App : { 
+            hashset_union(s, free_vars(t->App.h));
+            hashset_union(s, free_vars(t->App.b));
+            break;
+        }
+
+        case Lam : {
+            Hashset * b = free_vars(t->Lam.t);
+            hashset_remove(s, t->Lam.n);
+            hashset_union(s, b);
+            hashset_union(s, free_vars(t->Lam.h));
+            break;
+        }
+
+        case  Pi : {
+            Hashset * b = free_vars(t->Pi.b);
+            hashset_remove(s, t->Pi.n);
+            hashset_union(s, b);
+            hashset_union(s, free_vars(t->Pi.e));
+            break;
+        }
+
+        case  Sg : {
+            Hashset * b = free_vars(t->Sg.r);
+            hashset_remove(s, t->Sg.n);
+            hashset_union(s, b);
+            hashset_union(s, free_vars(t->Sg.l));
+            break;
+        }
+
+        case  SO : break;
+    }
+
+    return s;
 }
 
 #endif // CPTS_TYPECHECK || CPTS_ALL
@@ -486,17 +629,12 @@ alpha_eq (const Term * a, const Term * b)
     // }
     switch (a->Kind) 
     {
-        case Var : switch (b->Kind) { case Var : return a->Var.v == b->Var.v 
-                                    ;  default : return false; }
-        case App : switch (b->Kind) { case App : return alpha_eq(a->App.h, b->App.h) && alpha_eq(a->App.b, b->App.b)
-                                    ;  default : return false; }
-        case Lam : switch (b->Kind) { case Lam : return true // TODO 
-                                    ;  default : return false; }
-        case  Pi : switch (b->Kind) { case  Pi : return true // TODO 
-                                    ;  default : return false; }
-        case  SO : switch (b->Kind) { case  SO : return a->SO.s.s == b->SO.s.s 
-                                    ;  default : return false; }
-         default : return false;
+        case Var : return (b->Kind == Var) ? a->Var.v == b->Var.v                                         : false ;
+        case App : return (b->Kind == App) ? alpha_eq(a->App.h, b->App.h) && alpha_eq(a->App.b, b->App.b) : false ;
+        case Lam : return (b->Kind == Lam)                                                                        ;
+        case  Pi : return (b->Kind ==  Pi)                                                                        ;
+        case  SO : return (b->Kind ==  SO) ? (a->SO.s.s == b->SO.s.s)                                     : false ;
+        default  : return                                                                                   false ;
     }
 }
 
@@ -520,21 +658,73 @@ beta_eq (const Term * a, const Term * b)
 #if defined(CPTS_NORMALISATION) || defined(CPTS_ALL)
 
 Term * 
-whnf (Term * t)
+fold (Term * s[], Term * t, Term * (*f)(const Term *, const Term *))
 {
+    // TODO : implement
     return NULL;
 }
 
 Term * 
-spine (Term * t, Term ** s) 
+whnf (Term * t)
+{   
+    Term * s[] = {0}; // malloc(sizeof(Term)*sizeof(Term)+1);   
+    return spine_whnf(t, s);
+}
+
+Term * 
+spine_whnf (Term * t, Term * s[]) 
 {
-    return NULL;
+    switch (t->Kind) {
+        case App : {
+            Term ** u = s;
+            u[SIZE(s)+1] = t->App.b; // TODO : possible bug 
+            return spine_whnf(t->App.h, u);
+        }
+
+        case Lam : {
+            if (s != NULL) {
+                Term ** u = s;
+                Term  * b = s[SIZE(s)]; // TODO : possible bug 
+                free(s[SIZE(s)]);
+                return spine_whnf(subst(t->Lam.t, t->Lam.n, b), u);
+            }
+        }
+
+        default : return fold(s, t, app); // TODO : Possible bug 
+    }
 }
 
 Term * 
 nf (Term * t)
 {
-    return NULL;
+    Term * s[] = {0}; // malloc(sizeof(Term)*sizeof(Term)+1);   
+    return spine_nf(t, s);
+}
+
+Term * 
+spine_nf (Term * t, Term * s[]) 
+{
+    switch (t->Kind) {
+        case App : {
+            Term ** u = s;
+            u[SIZE(s)+1] = t->App.b; // TODO : possible bug 
+            return spine_whnf(t->App.h, u);
+        }
+
+        case Lam : {
+            if (s == NULL) return lam(t->Lam.n, nf(t->Lam.h), nf(t->Lam.t));
+            else {
+                Term ** u = s;
+                Term  * b = s[SIZE(s)]; // TODO : possible bug 
+                free(s[SIZE(s)]);
+                return spine_whnf(subst(t->Lam.t, t->Lam.n, b), u);
+            }
+        }
+
+        case  Pi : return fold(s, pi(t->Pi.n, nf(t->Pi.e), nf(t->Pi.b)), app); // TODO : \ e b -> app(e, nf(b))
+    
+        default : return fold(s, t, app); // TODO : \ e b -> app(e, nf(b))
+    }
 }
 
 #endif // CPTS_NORMALISATION || CPTS_ALL
