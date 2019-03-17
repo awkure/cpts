@@ -1,31 +1,25 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <unistd.h>
-
-// #include "std.c"
-#include "cpts.h"
-#include "test.c"
+#pragma GCC push_options
 
 /* ------------------------------------------------------------- */
 
 /*
- * Meta utils
+ * Utils
  */
 
 #if defined(CPTS_UTILS) || defined(CPTS_ALL)
 
 
-int string_append(char ** from, const char * fmt, ...)
+int 
+string_append (char ** from, const char * fmt, ...)
 {
     char * r = NULL;
     char * b = NULL;
 
     va_list arg_ptr;
     va_start(arg_ptr, fmt);
-    vasprintf(&r, fmt, arg_ptr);
+    vsprintf(r, fmt, arg_ptr);
 
-    asprintf(&b, "%s", (*from == NULL ? "\0" : *from));
+    sprintf(b, "%s", (*from == NULL ? "\0" : *from));
 
     char * n = (char *)calloc(strlen(b) + strlen(r) + 1, sizeof(char));
 
@@ -41,6 +35,14 @@ int string_append(char ** from, const char * fmt, ...)
     return 0;
 }
 
+inline void **
+tail (void * l[])
+{
+    size_t s = sizeof(l[0]);
+    free(l[0]);
+    return l+s;
+}
+
 #endif // CPTS_UTILS || CPTS_ALL
 
 
@@ -53,7 +55,22 @@ int string_append(char ** from, const char * fmt, ...)
 
 #if defined(CPTS_MAP) || defined(CPTS_ALL)
 
-size_t
+size_t 
+hash_fnv32 (void * d, size_t l) 
+{
+    char * p = (char *) d;
+    int r = p4;
+    
+    for (int i = 0; i < l; ++i) {
+        r ^= p[i];
+        r *= p5;
+        r ^= r >> 16;
+    }
+  
+    return r;
+}
+
+inline size_t 
 hash (size_t n) 
 {
     return (n * p1) ^ ((n * p2) >> 16);
@@ -71,7 +88,7 @@ hash (size_t n)
 
 #if defined(CPTS_MAP) || defined(CPTS_ALL)
 
-void 
+inline void 
 map_free (Map * m)
 {
     free(m->k); 
@@ -98,7 +115,7 @@ map_reserve (Map * m, int c)
     if (n->k == NULL || n->v == NULL) { free(n->k); free(n->v); return 0; }
 
     for (int i = 0 ; i < m->c ; ++i)
-        if (m->k[i]) map_set(&n, m->k[i], m->v[i]);
+        if (m->k[i]) map_set(n, m->k[i], (void*) m->v[i]);
 
     free(m->k); 
     free(m->v);
@@ -108,20 +125,22 @@ map_reserve (Map * m, int c)
 }
 
 int 
-map_set (Map * m, int k, void * v) 
+map_set (Map * m, int k, const void const * v) 
 {
     if (2*m->l >= m->c - 0) map_reserve(m, 2*m->c);
     if (  m->l >= m->c - 1) return 0;
   
+    size_t vv = (size_t) v;
+
     for (int j = 0, i = hash(k ? k : 1); j < m->c; ++j, ++i) {
         i &= m->c - 1;
         if (!m->k[i]) {
             m->k[i] = k;
-            m->v[i] = v;
+            m->v[i] = vv;
             ++m->l;
             return 1;
         } else if (m->k[i] == k) {
-            if (v) m->v[i] = v;
+            if (vv) m->v[i] = vv;
             else {
                 m->k[i] = 0;
                 --m->l;
@@ -133,13 +152,14 @@ map_set (Map * m, int k, void * v)
 }
 
 void * 
-map_get (Map * m, int k) 
+map_get (Map * m, const char * const s) 
 {
     if (!m->c) return 0;
   
-    for (int i = hash(k ? k : 1); ; ++i) {
+    int k = hash_fnv32((char *) s, SIZE(s));
+    for (int i = k ? k : 1; ; ++i) {
         i &= m->c - 1;
-        if (m->k[i] == k) return m->v[i];
+        if (m->k[i] == k) return (void *) m->v[i];
         else if (!m->k[i]) break;
     }
 
@@ -175,7 +195,7 @@ hashset_new (void)
     return s;
 }
 
-void 
+inline void 
 hashset_free (Hashset * s)
 {
     if (s) free(s->i);
@@ -185,19 +205,36 @@ hashset_free (Hashset * s)
 int 
 hashset_append (Hashset * s, void * v) 
 {
-    if (v == 0 || v == 1) return -1;
+    size_t vv = (size_t) v;
+    if (vv == 0 || vv == 1) return -1;
 
-    size_t idx = s->m & hash(v); // (p1 * v);
+    size_t idx = s->m & hash(vv); // (p1 * v);
 
     while (s->i[idx] != 0 && s->i[idx] != 1) 
-        if (s->i[idx] == v) return 0;
+        if (s->i[idx] == vv) return 0;
         else idx = s->m & (idx + p2);
 
     s->l++;
     if (s->i[idx] == 1) s->d--;
-    s->i[idx] = v;
+    s->i[idx] = vv;
 
     return 1;
+}
+
+// TODO : reimplement
+void * 
+hashset_get (Hashset * s, void * i) 
+{
+    size_t vv = (size_t) i;
+    if (vv == 0 || vv == 1) return NULL;
+
+    size_t idx = s->m & hash(vv);
+
+    while (s->i[idx] != 0 && s->i[idx] != 1)
+        if (s->i[idx] == vv) return (void*) vv;
+
+    return NULL;
+
 }
 
 static void 
@@ -225,7 +262,7 @@ hashset_insert (Hashset * s, void * i)
     return r;
 }
 
-int
+int // TODO 
 hashset_union (Hashset * t, Hashset * s)
 {
     
@@ -253,7 +290,7 @@ hashset_union (Hashset * t, Hashset * s)
 int 
 hashset_remove (Hashset * s, void * v)
 {
-    size_t idx = s->m & hash(v);
+    size_t idx = s->m & hash((size_t)v);
 
     while (s->i[idx] != 0) 
         if (s->i[idx] != 0) {
@@ -269,10 +306,10 @@ hashset_remove (Hashset * s, void * v)
 int 
 hashset_is_contained (Hashset * s, void * v) 
 {
-    size_t idx = s->m & hash(v);
+    size_t idx = s->m & hash((size_t)v);
 
     while (s->i[idx] != 0) 
-        if (s->i[idx] == v) return 1;
+        if (s->i[idx] == (size_t)v) return 1;
         else idx = s->m & (idx + p2);
 
     return 0;
@@ -290,7 +327,7 @@ hashset_is_contained (Hashset * s, void * v)
 
 #if defined(CPTS_INTRO) || defined(CPTS_ALL)
 
-Term *
+Term * __attribute__((const))
 var (const char * n)
 {
     // return &(struct Term) { &(struct Var) { .v = n } }; 
@@ -300,7 +337,7 @@ var (const char * n)
     return t;
 }
 
-Term *
+Term * __attribute__((const))
 app (const Term * lhs , const Term * rhs)
 {
     // return &(struct App) { .h = lhs , .b = rhs };
@@ -310,7 +347,7 @@ app (const Term * lhs , const Term * rhs)
     return t;
 }
 
-Term *
+Term * __attribute__((const))
 lam (const char * n , const Term * h , const Term * b)
 {
     // return &(struct Term) { &(const struct Lam) { .n = n , .h = h , .t = b } };
@@ -320,7 +357,7 @@ lam (const char * n , const Term * h , const Term * b)
     return t;
 }
 
-Term *
+Term * __attribute__((const))
 pi (const char * n , const Term * e , const Term * b)
 {
     // return &(struct Term) { &(struct Pi) { .n = n , .e = e , .b = b } , Box };
@@ -330,13 +367,13 @@ pi (const char * n , const Term * e , const Term * b)
     return t;
 }
 
-Term * 
+Term * __attribute__((const))
 arr (const Term * e , const Term * b) 
 {
     return pi("x", e, b);
 }
 
-Term *
+Term * __attribute__((const))
 sg (const char * n , const Term * l , const Term * r)
 {
     Term * t = (Term*)calloc(1, sizeof(Term));
@@ -345,7 +382,7 @@ sg (const char * n , const Term * l , const Term * r)
     return t;
 }
 
-Term * 
+Term * __attribute__((const))
 sort (const Set s) 
 {
     Term * t = (Term*)calloc(1, sizeof(Term));
@@ -367,7 +404,7 @@ sort (const Set s)
 #if defined(CPTS_LAMBDA_CUBE) || defined(CPTS_ALL)
 
 
-Set * 
+Set * __attribute__((pure))
 lift (Set s) 
 {
     switch (s) { case Star : return (Set *)Box;
@@ -375,21 +412,21 @@ lift (Set s)
 }
 
 char * 
-show_set (Set * s) 
+show_set (Set s) 
 {
-         if ( *s == Star ) return "Star" ;
-    else if ( *s ==  Box ) return  "Box" ;
-    else                   return "None" ;
+         if ( s == Star ) return "Star" ;
+    else if ( s ==  Box ) return  "Box" ;
+    else                  return "None" ;
 }
 
+// for (int i = 0; i < sizeof(rules)/4 ; ++i) { // TODO : possible bug in sizeof 
 #define LAMBDA_CUBE(name, ...)\
 Set *\
-name##_rule (Set s1, Set s2, Set rules[][3])\
+name##_rule (Set s1, Set s2, Rules rules)\
 {\
-    for (int i = 0; i < sizeof(rules)/4 ; ++i) {\
-        if (rules[i][0] == s1 && rules[i][1] == s2)\
-            return &rules[i][2];\
-    }\
+    for (int i = 0; i < rules.s/4; ++i)\
+        if (rules.r[i][0] == s1 && rules.r[i][1] == s2)\
+            return &rules.r[i][2];\
     return NULL;\
 }
 
@@ -407,13 +444,13 @@ LAMBDA_CUBE(STLC);
 
 #if defined(CPTS_TYPECHECK) || defined(CPTS_ALL)
 
-Term *
-type_check (Term * t, Map * con, PTS * ts)
+const Term * __attribute__((hot))
+type_check (const Term * t, Map * con, PTS * ts)
 {
     switch (t->Kind) 
     {
         case Var : { 
-            Term * v = map_get(con, &t->Var.v);
+            const Term * v = map_get(con, t->Var.v);
             
             if (v != NULL) DIE(format("Unbound variable %s", t->Var.v));
 
@@ -421,13 +458,13 @@ type_check (Term * t, Map * con, PTS * ts)
         }
 
         case App : {
-            Term * l = whnf(type_check(t->App.h, con, ts));
+            const Term * l = whnf(type_check(t->App.h, con, ts));
 
-            if (l->Kind != Pi) DIE(format("Expression of type %s cannot be applied", l)); // TODO : print bug 
+            if (l->Kind != Pi) DIE(format("Expression of type %s cannot be applied", show_term(l)));
 
-            Term * r = type_check(t->App.b, con, ts);
+            const Term * r = type_check(t->App.b, con, ts);
 
-            if (!beta_eq(r, l->Pi.e)) DIE(format("%s cannot be substituted with %s", l->Pi.e, r)); // TODO : print bug 
+            if (!beta_eq(r, l->Pi.e)) DIE(format("%s cannot be substituted with %s", show_term(l->Pi.e), show_term(r)));
 
             return subst(l->Pi.b, l->Pi.n, r);
         }
@@ -436,58 +473,59 @@ type_check (Term * t, Map * con, PTS * ts)
             type_check(t->Lam.h, con, ts);
 
             Map * nc = con;
-            map_set(nc, hash(t->Lam.n), t->Lam.h);
+            map_set(nc, hash_fnv32((char *) t->Lam.n, SIZE(t->Lam.n)), (Term *) t->Lam.h);
 
-            Term * i = type_check(t->Lam.t, nc, ts);
+            const Term * i = type_check(t->Lam.t, nc, ts);
 
             return pi(t->Lam.n, t->Lam.h, i);
         }
 
         case Pi : {
-            Term * dom = whnf(type_check(t->Pi.e, con, ts));
-            if (dom->Kind != SO) DIE(format("Uninhabited domain of pi type provided: %s", dom)); // TODO : print
+            const Term * dom = whnf(type_check(t->Pi.e, con, ts));
+            if (dom->Kind != SO) DIE(format("Uninhabited domain of pi type provided: %s", show_term(dom)));
 
             Map * nc = con;
-            map_set(con, hash(t->Pi.n), dom); 
+            map_set(con, hash_fnv32((char *) t->Pi.n, SIZE(t->Pi.n)), dom); 
 
-            Term * codom = whnf(type_check(t->Pi.b, con, ts));
-            if (codom->Kind != SO) DIE(format("Uninhabited codomain of pi type provided: %s", codom)); // TODO : coprint
+            const Term const * codom = whnf(type_check(t->Pi.b, con, ts));
+            if (codom->Kind != SO) DIE(format("Uninhabited codomain of pi type provided: %s", show_term(codom)));
 
             Set * ns = ts->rule(dom->SO.s.s, codom->SO.s.s);
             if (ns == NULL) DIE(format("Reached omega at %s", t->SO.s.s));
 
-            return ns;
+            return sort(*ns);
         }
 
         case Sg : {
-            Term * dom = whnf(type_check(t->Sg.l, con, ts));
-            if (dom->Kind != SO) DIE(format("Uninhabited domain of pi type provided: %s", dom)); // TODO : print
+            const Term const * dom = whnf(type_check(t->Sg.l, con, ts));
+            if (dom->Kind != SO) DIE(format("Uninhabited domain of pi type provided: %s", show_term(dom))); 
 
             Map * nc = con;
-            map_set(con, hash(t->Sg.n), dom); 
+            map_set(con, hash_fnv32((char *) t->Sg.n, SIZE(t->Sg.n)), dom); 
 
-            Term * codom = whnf(type_check(t->Sg.r, con, ts));
-            if (codom->Kind != SO) DIE(format("Uninhabited codomain of pi type provided: %s", codom)); // TODO : coprint
+            const Term const * codom = whnf(type_check(t->Sg.r, con, ts));
+            if (codom->Kind != SO) DIE(format("Uninhabited codomain of pi type provided: %s", show_term(codom)));
 
             Set * ns = ts->rule(dom->SO.s.s, codom->SO.s.s);
             if (ns == NULL) DIE(format("Reached omega at %s", t->SO.s.s));
 
-            return ns;
+            return sort(*ns);
         }
 
         case SO : {
             Set * ns = ts->lift(t->SO.s.s);
-            if (ns == NULL) DIE(format("Reached omega at %s", t->SO.s.s)); else return ns;
+            if (ns == NULL) DIE(format("Reached omega at %s", (char *) t->SO.s.s)); 
+            else return sort(*ns);
         }
     }
 }
 
-Term * 
+const Term * __attribute__((hot))
 subst (const Term * t, const char * from, const Term * to)
 {
     switch (t->Kind) 
     {
-        case Var : return strcmp(t->Var.v, from) ? t : to; // TODO : possible bug
+        case Var : return strcmp(t->Var.v, from) ? t : to;
         
         case App : return app(t->App.h, subst(t->App.b, from, to));
         
@@ -495,17 +533,17 @@ subst (const Term * t, const char * from, const Term * to)
             if (strcmp(t->Lam.n, from)) 
                 return lam(t->Lam.n, subst(t->Lam.h, from, to), t->Lam.t);
             
-            if (map_get(free_vars(to), t->Lam.n) == NULL) 
+            if (hashset_get(free_vars(to), (void *) t->Lam.n) == NULL) 
                 return lam(t->Lam.n, subst(t->Lam.h, from, to), subst(t->Lam.t, from, to));
 
-            char * unused = t->Lam.n;
+            char * unused = (char *) t->Lam.n;
             string_append(&unused, "'");
 
             for (;;) { 
-                Hashset * used = free_vars(t->Lam.t); // TODO : pointer mistype
+                Hashset * used = free_vars(t->Lam.t);
                 hashset_union(used, free_vars(to));
                 
-                if (hashset_is_contained(used, unused)) string_append(unused, "'");
+                if (hashset_is_contained(used, unused)) string_append(&unused, "'");
                 else {
                     Term * r = lam(unused, subst(t, t->Lam.n, var(unused)), subst(t->Lam.h, t->Lam.n, var(unused)));
                     return subst(r, from, to);
@@ -517,19 +555,19 @@ subst (const Term * t, const char * from, const Term * to)
             if (strcmp(t->Pi.n, from) != 0) 
                 return pi(t->Pi.n, subst(t->Pi.e, from, to), t->Pi.b);
 
-            if (!hashset_is_contained(free_vars(to), t->Pi.n))
+            if (!hashset_is_contained(free_vars(to), (void *) t->Pi.n))
                 return pi(t->Pi.n, subst(t->Pi.e, from, to), subst(t->Pi.b, from, to));
 
-            char * unused = t->Pi.n;
+            char * unused = (char *) t->Pi.n;
             string_append(&unused, "'");
 
             for (;;) {
                 Hashset * used = free_vars(t->Pi.b);
                 hashset_union(used, free_vars(to));
 
-                if (hashset_is_contained(used, unused)) string_append(unused, "'");
+                if (hashset_is_contained(used, unused)) string_append(&unused, "'");
                 else {
-                    Term * r = pi(unused, subst(t, t->Pi.n, var(unused)), subst(t->Pi.e, t->Pi.b, var(unused)));
+                    Term * r = pi(unused, subst(t, t->Pi.n, var(unused)), subst(t->Pi.e, t->Pi.n, var(unused)));
                     return subst(r, from, to);
                 }
             }
@@ -539,19 +577,19 @@ subst (const Term * t, const char * from, const Term * to)
             if (strcmp(t->Pi.n, from) != 0) 
                 return pi(t->Pi.n, subst(t->Pi.e, from, to), t->Pi.b);
 
-            if (!hashset_is_contained(free_vars(to), t->Pi.n))
+            if (!hashset_is_contained(free_vars(to), (void *) t->Pi.n))
                 return pi(t->Pi.n, subst(t->Pi.e, from, to), subst(t->Pi.b, from, to));
 
-            char * unused = t->Pi.n;
+            char * unused = (char *) t->Pi.n; 
             string_append(&unused, "'");
 
             for (;;) {
                 Hashset * used = free_vars(t->Pi.b);
                 hashset_union(used, free_vars(to));
 
-                if (hashset_is_contained(used, unused)) string_append(unused, "'");
+                if (hashset_is_contained(used, unused)) string_append(&unused, "'");
                 else {
-                    Term * r = pi(unused, subst(t, t->Pi.n, var(unused)), subst(t->Pi.e, t->Pi.b, var(unused)));
+                    Term * r = pi(unused, subst(t, t->Pi.n, var(unused)), subst(t->Pi.e, t->Pi.n, var(unused)));
                     return subst(r, from, to);
                 }
             }
@@ -562,14 +600,14 @@ subst (const Term * t, const char * from, const Term * to)
 
 }
 
-Hashset * 
+Hashset * __attribute__((hot))
 free_vars (const Term * t)
 {
     Hashset * s = NULL;
 
     switch (t->Kind) {
 
-        case Var : hashset_insert(s, t->Var.v);
+        case Var : hashset_insert(s, (void *) t->Var.v);
 
         case App : { 
             hashset_union(s, free_vars(t->App.h));
@@ -579,7 +617,7 @@ free_vars (const Term * t)
 
         case Lam : {
             Hashset * b = free_vars(t->Lam.t);
-            hashset_remove(s, t->Lam.n);
+            hashset_remove(s, (void *) t->Lam.n);
             hashset_union(s, b);
             hashset_union(s, free_vars(t->Lam.h));
             break;
@@ -587,7 +625,7 @@ free_vars (const Term * t)
 
         case  Pi : {
             Hashset * b = free_vars(t->Pi.b);
-            hashset_remove(s, t->Pi.n);
+            hashset_remove(s, (void *) t->Pi.n);
             hashset_union(s, b);
             hashset_union(s, free_vars(t->Pi.e));
             break;
@@ -595,7 +633,7 @@ free_vars (const Term * t)
 
         case  Sg : {
             Hashset * b = free_vars(t->Sg.r);
-            hashset_remove(s, t->Sg.n);
+            hashset_remove(s, (void *) t->Sg.n);
             hashset_union(s, b);
             hashset_union(s, free_vars(t->Sg.l));
             break;
@@ -629,16 +667,18 @@ alpha_eq (const Term * a, const Term * b)
     // }
     switch (a->Kind) 
     {
-        case Var : return (b->Kind == Var) ? a->Var.v == b->Var.v                                         : false ;
+        case Var : return (b->Kind == Var) ? strcmp(a->Var.v, b->Var.v) == 0                              : false ;
         case App : return (b->Kind == App) ? alpha_eq(a->App.h, b->App.h) && alpha_eq(a->App.b, b->App.b) : false ;
-        case Lam : return (b->Kind == Lam)                                                                        ;
-        case  Pi : return (b->Kind ==  Pi)                                                                        ;
-        case  SO : return (b->Kind ==  SO) ? (a->SO.s.s == b->SO.s.s)                                     : false ;
+        case Lam : return (b->Kind == Lam) ? strcmp(a->Lam.n, b->Lam.n) == 0 
+                                          && alpha_eq(a->Lam.h, b->Lam.h) 
+                                          && alpha_eq(a->Lam.t, subst(b->Lam.t, a->Lam.n, a->Lam.t)) : false; // TODO : possible bug 
+        case  Pi : return (b->Kind ==  Pi)                                                                        ; 
+        case  SO : return (b->Kind ==  SO) ? a->SO.s.s == b->SO.s.s                                       : false ;
         default  : return                                                                                   false ;
     }
 }
 
-two 
+inline two
 beta_eq (const Term * a, const Term * b) 
 {
     return alpha_eq(nf(a), nf(b));
@@ -657,57 +697,56 @@ beta_eq (const Term * a, const Term * b)
 
 #if defined(CPTS_NORMALISATION) || defined(CPTS_ALL)
 
-Term * 
-fold (Term * s[], Term * t, Term * (*f)(const Term *, const Term *))
+const Term * __attribute__((hot))
+fold (Term * s[], const Term * t, Term * (*f)(const Term *, const Term *))
 {
-    // TODO : implement
-    return NULL;
+    return s == NULL ? t : f(s[0], fold((Term **) tail((void **)s), t, f));
 }
 
-Term * 
-whnf (Term * t)
+inline const Term * 
+whnf (const Term * t)
 {   
     Term * s[] = {0}; // malloc(sizeof(Term)*sizeof(Term)+1);   
     return spine_whnf(t, s);
 }
 
-Term * 
-spine_whnf (Term * t, Term * s[]) 
+const Term * __attribute__((hot))
+spine_whnf (const Term * t, Term * s[]) 
 {
     switch (t->Kind) {
         case App : {
             Term ** u = s;
-            u[SIZE(s)+1] = t->App.b; // TODO : possible bug 
+            u[SIZE(*s)+1] = (Term *) t->App.b; 
             return spine_whnf(t->App.h, u);
         }
 
         case Lam : {
             if (s != NULL) {
                 Term ** u = s;
-                Term  * b = s[SIZE(s)]; // TODO : possible bug 
-                free(s[SIZE(s)]);
+                Term  * b = s[SIZE(*s)];
+                free(s[SIZE(*s)]);
                 return spine_whnf(subst(t->Lam.t, t->Lam.n, b), u);
             }
         }
 
-        default : return fold(s, t, app); // TODO : Possible bug 
+        default : return fold(s, t, app); 
     }
 }
 
-Term * 
-nf (Term * t)
+const Term * __attribute__((__gnu_inline__))
+nf (const Term * t)
 {
-    Term * s[] = {0}; // malloc(sizeof(Term)*sizeof(Term)+1);   
+    Term * s[] = {0};
     return spine_nf(t, s);
 }
 
-Term * 
-spine_nf (Term * t, Term * s[]) 
+const Term * __attribute__((hot)) 
+spine_nf (const Term * t, Term * s[]) 
 {
     switch (t->Kind) {
         case App : {
             Term ** u = s;
-            u[SIZE(s)+1] = t->App.b; // TODO : possible bug 
+            u[SIZE(*s)+1] = (Term *) t->App.b;
             return spine_whnf(t->App.h, u);
         }
 
@@ -715,8 +754,8 @@ spine_nf (Term * t, Term * s[])
             if (s == NULL) return lam(t->Lam.n, nf(t->Lam.h), nf(t->Lam.t));
             else {
                 Term ** u = s;
-                Term  * b = s[SIZE(s)]; // TODO : possible bug 
-                free(s[SIZE(s)]);
+                Term  * b = s[SIZE(*s)];
+                free(s[SIZE(*s)]);
                 return spine_whnf(subst(t->Lam.t, t->Lam.n, b), u);
             }
         }
@@ -739,24 +778,23 @@ spine_nf (Term * t, Term * s[])
 
 #if defined(CPTS_SHOWCASE) || defined(CPTS_ALL)
 
-const char * 
+char * __attribute__((nonnull (1)))
 format (const char * pat, ...)
 {
-    char b[100]; // TODO : POSSIBLE OVERFLOW, CHANGE TO EXTERNAL CONST 
+    char * b = calloc(MAX_FORMAT_SIZE+1, sizeof(char));
 
     va_list v;
     va_start(v, pat);
 
-    vsnprintf(b, sizeof(b), pat, v);
+    vsprintf(b, pat, v);
 
     va_end(v);
 
     return b;
 }
 
-// TODO : refactor 
 const char *
-show_term (Term * t) 
+show_term (const Term * t) 
 {
     switch (t->Kind)
     {
@@ -765,7 +803,7 @@ show_term (Term * t)
         case Lam : return format("\\{%s} %s. %s"  ,            t->Lam.n    , show_term( t->Lam.h ) , show_term( t->Lam.t )) ; break ;
         case  Pi : return format("%s ->{%s} %s"   , show_term( t->Pi.e   ) ,            t->Pi.n    , show_term( t->Pi.b  )) ; break ;
         case  Sg : return format("Sg{%s} [%s] %s" ,            t->Sg.n     , show_term( t->Sg.l  ) , show_term( t->Sg.r  )) ; break ;
-        // case  SO : return format("SO[%s]"         , show_set(  t->SO.s.s )                                                ) ; break;
+        case  SO : return format("SO[%s]"         , show_set(  t->SO.s.s )                                                ) ; break ;
         default  : return "[None]";
     }
 }
@@ -780,7 +818,7 @@ show_term (Term * t)
  * Entry point
  */
 
-void 
+void __attribute__((nonnull (1,3,4)))
 fatal (const char * fn, int l, const char * f, char * e) 
 {
     char * ln;
@@ -796,20 +834,8 @@ fatal (const char * fn, int l, const char * f, char * e)
 int
 main (void) 
 {
-    Set STLC_rules[2][3] = { { Star , Star , Box }
-                           , { Box  , Star , Box } };
-
-    printf("Done\n");
-
-    char * s = show_set(STLC_rule(Box, Star, STLC_rules));
-    printf("STLC_rules: %s\n", s ? s : "NULL");
-
-    Term * t = var("b");
-    Map  * c = (Map*)calloc(1, sizeof(Map));
-    type_check(t, c, NULL); // TODO : BUG HERE 
-
-    test_lam_intro();
-    stage_1();
-
+    test();
     return 0;
 }
+
+#pragma GCC pop_options

@@ -1,5 +1,4 @@
 t/
-amd64/
-i386/
 cpts.org
-std.c
+cpts
+*/*.o

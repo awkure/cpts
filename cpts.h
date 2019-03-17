@@ -31,16 +31,22 @@ __BEGIN_DECLS
 #if defined(CPTS_UTILS) || defined(CPTS_ALL)
 
 extern int string_append(char **, const char *, ...);
+extern void ** tail (void **);
 
 #endif // CPTS_UTILS || CPTS_ALL
 
+#define MAX_FORMAT_SIZE 100
+
 #if defined(CPTS_HASH) || defined(CPTS_ALL)
 
-static const unsigned int p1 = 0x0059;
-static const unsigned int p2 = 0x0CE5;
-static const unsigned int p3 = 0x1DC5;
+static const unsigned int p1 = 0x00000059;
+static const unsigned int p2 = 0x00000CE5;
+static const unsigned int p3 = 0x00001DC5;
+static const unsigned int p4 = 0x811c9dc5;
+static const unsigned int p5 = 0x01000193;
 
-extern size_t hash (size_t);
+extern size_t hash       (        size_t);
+extern size_t hash_fnv32 (void *, size_t);
 
 #endif // CPTS_HASH || CPTS_ALL
 
@@ -63,8 +69,8 @@ typedef struct { size_t * k
 extern  Map * map_new     (void                ); // TODO : implement
 extern void   map_free    (Map *               );
 extern  int   map_reserve (Map * , int         );
-extern  int   map_set     (Map * , int , void *);
-extern void * map_get     (Map * , int         );
+extern  int   map_set     (Map * , int , const void const *);
+extern void * map_get     (Map * , const char * const);
 
 #endif 
 
@@ -82,7 +88,7 @@ typedef struct { size_t   b
 extern Hashset * hashset_new          (void             );
 extern    void   hashset_free         (Hashset *        );
 extern     int   hashset_reserve      (Hashset *        ); // TODO : implement 
-extern    void * hashset_get          (Hashset *        ); // TODO : implement
+extern    void * hashset_get          (Hashset *, void *); // TODO : implement
 extern     int   hashset_append       (Hashset *, void *);
 extern     int   hashset_insert       (Hashset *, void *);
 extern     int   hashset_remove       (Hashset *, void *);
@@ -92,6 +98,10 @@ extern     int   hashset_is_contained (Hashset *, void *);
 
 typedef enum { false , true } two;
 typedef enum { Star  ,  Box } Set;
+
+typedef struct { Set ** r 
+               ; size_t s 
+               ; } Rules;
 
 typedef struct { void * s ; } Sort; // TODO : DANGER
 
@@ -118,20 +128,21 @@ extern Term *  arr (const Term *, const Term *              );
 extern Term *   sg (const char *, const Term *, const Term *);
 extern Term * sort (const Set                               );
 
-extern    Term *     subst (const Term *, const char * from, const Term *);
-extern Hashset * free_vars (const Term *                                 );
+extern const    Term * type_check (const Term *, Map *, PTS *                   );
+extern const    Term *      subst (const Term *, const char * from, const Term *);
+extern       Hashset *  free_vars (const Term *                                 );
 
 extern two alpha_eq (const Term *, const Term *);
 extern two  beta_eq (const Term *, const Term *);
 
-extern Term *       fold (Term * s[], Term *, Term * (*f)(const Term *, const Term *));
-extern Term *       whnf (Term *                                                     );
-extern Term * spine_whnf (Term *, Term * s[]                                         );
-extern Term *         nf (Term *                                                     );
-extern Term *   spine_nf (Term *, Term * s[]                                         ); 
+extern const Term *       fold (      Term **, const Term *, Term * (*f)(const Term *, const Term *));
+extern const Term *       whnf (const Term  *                                                       );
+extern const Term * spine_whnf (const Term  *, Term * s[]                                           );
+extern const Term *         nf (const Term  *                                                       );
+extern const Term *   spine_nf (const Term  *, Term * s[]                                           ); 
 
-extern const char *    format (const char *, ...);
-extern const char * show_term (Term *           );
+extern       char *    format (const char *, ...);
+extern const char * show_term (const Term *     );
 
 extern void fatal (const char * fn, int l, const char * f, char * e);
 
